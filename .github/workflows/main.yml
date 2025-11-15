@@ -59,6 +59,47 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install Private Internet Access (PIA) VPN
+        env:
+          PIA_USERNAME: ${{ secrets.PIA_USERNAME }}
+          PIA_PASSWORD: ${{ secrets.PIA_PASSWORD }}
+        run: |
+          $url = "https://installers.privateinternetaccess.com/download/pia-windows-x64-3.7-08412.exe"
+          $installer = "$env:TEMP\pia-installer.exe"
+
+          Write-Host "Downloading PIA installer..."
+          Invoke-WebRequest -Uri $url -OutFile $installer
+
+          Write-Host "Running PIA installer (silent)..."
+          Start-Process -FilePath $installer -ArgumentList '/S' -Wait
+
+          Remove-Item $installer -Force -ErrorAction SilentlyContinue
+
+          $piaCtl = "C:\Program Files\Private Internet Access\piactl.exe"
+          if (-not (Test-Path $piaCtl)) {
+            $piaCtl = "C:\Program Files (x86)\Private Internet Access\piactl.exe"
+          }
+          if (-not (Test-Path $piaCtl)) {
+            Write-Error "piactl not found after install"
+            exit 1
+          }
+
+          Write-Host "Logging in to PIA (credentials provided via secrets)..."
+          & $piaCtl login -u $env:PIA_USERNAME -p $env:PIA_PASSWORD
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "PIA login failed"
+            exit 1
+          }
+
+          Write-Host "Connecting PIA..."
+          & $piaCtl connect
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "PIA connect failed"
+            exit 1
+          }
+
+          Write-Host "PIA installed and connected."
+
       - name: Install VS Code Desktop
         run: |
           $vscodeUrl = "https://update.code.visualstudio.com/latest/win32-x64-user/stable"
