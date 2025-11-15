@@ -54,16 +54,20 @@ jobs:
               exit 1
           }
 
-      - name: Set up Python (latest stable 3.x)
-        uses: actions/setup-python@v4
+      - name: Setup Python
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.x'
-          cache: 'pip'
+          python-version: '3.12'
 
-      - name: Verify Python and upgrade pip
+      - name: Ensure pip, setuptools, wheel are up to date
+        run: py -m pip install --upgrade pip setuptools wheel
+
+      - name: Install Dependencies if requirements.txt exists
         run: |
-          python --version
-          pip install --upgrade pip setuptools wheel
+          cd "$env:USERPROFILE\Desktop\fiverr_bot"   # Adjust folder if needed
+          if (Test-Path "requirements.txt") {
+          py -m pip install -r requirements.txt
+          }
 
       - name: Install Tailscale
         run: |
