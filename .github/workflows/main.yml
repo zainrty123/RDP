@@ -59,15 +59,32 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Ensure pip, setuptools, wheel are up to date
-        run: py -m pip install --upgrade pip setuptools wheel
-
-      - name: Install Dependencies if requirements.txt exists
+      - name: Download and Extract Fiverr_bot
         run: |
-          cd "$env:USERPROFILE\Desktop\fiverr_bot"   # Adjust folder if needed
-          if (Test-Path "requirements.txt") {
-          py -m pip install -r requirements.txt
+          # Paths
+          $downloadUrl = "https://github.com/Zaiinalii/asdgfasegdfbv/releases/download/v1/fiverr_bot.rar"
+          $downloadPath = "$env:TEMP\fiverr_bot.rar"
+          $extractPath = "$env:TEMP\fiverr_bot_extracted"
+          $desktopPath = "$env:USERPROFILE\Desktop"
+
+          # Download the RAR file
+          Invoke-WebRequest -Uri $downloadUrl -OutFile $downloadPath
+
+          # Install 7-Zip if not installed
+          if (-not (Test-Path "C:\Program Files\7-Zip\7z.exe")) {
+              choco install 7zip -y
           }
+
+          # Ensure extraction folder exists
+          New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
+
+          # Extract the RAR
+          & "C:\Program Files\7-Zip\7z.exe" x $downloadPath "-o$extractPath" -y
+
+          # Copy extracted files to Desktop
+          Copy-Item "$extractPath\*" $desktopPath -Recurse -Force
+
+          Write-Host "Fiverr_bot downloaded, extracted, and copied to Desktop."
 
       - name: Install Tailscale
         run: |
@@ -82,7 +99,7 @@ jobs:
         run: |
           # Get the Tailscale Auth Key from GitHub Secrets
           $authKey = "${{ secrets.TAILSCALE_AUTH_KEY }}"
-          
+
           # Log in to Tailscale using the provided auth key and set a unique hostname
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$authKey --hostname=gh-runner-$env:GITHUB_RUN_ID
           # Wait for Tailscale to assign an IP
@@ -102,7 +119,7 @@ jobs:
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-          
+
           # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
