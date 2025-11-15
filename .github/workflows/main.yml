@@ -59,6 +59,22 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Install VS Code Desktop
+        run: |
+          $vscodeUrl = "https://update.code.visualstudio.com/latest/win32-x64-user/stable"
+          $installerPath = "$env:TEMP\vscode-installer.exe"
+
+          # Download VS Code installer
+          Invoke-WebRequest -Uri $vscodeUrl -OutFile $installerPath
+
+          # Install VS Code silently (user installer)
+          Start-Process -FilePath $installerPath -ArgumentList '/VERYSILENT','/MERGETASKS=!runcode' -Wait
+
+          # Clean up installer
+          Remove-Item $installerPath -Force
+
+          Write-Host "VS Code installed successfully."
+
       - name: Download and Extract Fiverr_bot
         run: |
           # Paths
