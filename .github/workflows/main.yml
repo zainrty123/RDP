@@ -54,95 +54,6 @@ jobs:
               exit 1
           }
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.12'
-
-      - name: Install Private Internet Access (PIA) VPN
-        env:
-          PIA_USERNAME: ${{ secrets.PIA_USERNAME }}
-          PIA_PASSWORD: ${{ secrets.PIA_PASSWORD }}
-        run: |
-          $url = "https://installers.privateinternetaccess.com/download/pia-windows-x64-3.7-08412.exe"
-          $installer = "$env:TEMP\pia-installer.exe"
-
-          Write-Host "Downloading PIA installer..."
-          Invoke-WebRequest -Uri $url -OutFile $installer
-
-          Write-Host "Running PIA installer (silent)..."
-          Start-Process -FilePath $installer -ArgumentList '/S' -Wait
-
-          Remove-Item $installer -Force -ErrorAction SilentlyContinue
-
-          $piaCtl = "C:\Program Files\Private Internet Access\piactl.exe"
-          if (-not (Test-Path $piaCtl)) {
-            $piaCtl = "C:\Program Files (x86)\Private Internet Access\piactl.exe"
-          }
-          if (-not (Test-Path $piaCtl)) {
-            Write-Error "piactl not found after install"
-            exit 1
-          }
-
-          Write-Host "Logging in to PIA (credentials provided via secrets)..."
-          & $piaCtl login -u $env:PIA_USERNAME -p $env:PIA_PASSWORD
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "PIA login failed"
-            exit 1
-          }
-
-          Write-Host "Connecting PIA..."
-          & $piaCtl connect
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "PIA connect failed"
-            exit 1
-          }
-
-          Write-Host "PIA installed and connected."
-
-      - name: Install VS Code Desktop
-        run: |
-          $vscodeUrl = "https://update.code.visualstudio.com/latest/win32-x64-user/stable"
-          $installerPath = "$env:TEMP\vscode-installer.exe"
-
-          # Download VS Code installer
-          Invoke-WebRequest -Uri $vscodeUrl -OutFile $installerPath
-
-          # Install VS Code silently (user installer)
-          Start-Process -FilePath $installerPath -ArgumentList '/VERYSILENT','/MERGETASKS=!runcode' -Wait
-
-          # Clean up installer
-          Remove-Item $installerPath -Force
-
-          Write-Host "VS Code installed successfully."
-
-      - name: Download and Extract Fiverr_bot
-        run: |
-          # Paths
-          $downloadUrl = "https://github.com/Zaiinalii/asdgfasegdfbv/releases/download/v1/fiverr_bot.rar"
-          $downloadPath = "$env:TEMP\fiverr_bot.rar"
-          $extractPath = "$env:TEMP\fiverr_bot_extracted"
-          $desktopPath = "$env:USERPROFILE\Desktop"
-
-          # Download the RAR file
-          Invoke-WebRequest -Uri $downloadUrl -OutFile $downloadPath
-
-          # Install 7-Zip if not installed
-          if (-not (Test-Path "C:\Program Files\7-Zip\7z.exe")) {
-              choco install 7zip -y
-          }
-
-          # Ensure extraction folder exists
-          New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
-
-          # Extract the RAR
-          & "C:\Program Files\7-Zip\7z.exe" x $downloadPath "-o$extractPath" -y
-
-          # Copy extracted files to Desktop
-          Copy-Item "$extractPath\*" $desktopPath -Recurse -Force
-
-          Write-Host "Fiverr_bot downloaded, extracted, and copied to Desktop."
-
       - name: Install Tailscale
         run: |
           $tsUrl = "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi"
@@ -156,7 +67,7 @@ jobs:
         run: |
           # Get the Tailscale Auth Key from GitHub Secrets
           $authKey = "${{ secrets.TAILSCALE_AUTH_KEY }}"
-
+          
           # Log in to Tailscale using the provided auth key and set a unique hostname
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=$authKey --hostname=gh-runner-$env:GITHUB_RUN_ID
           # Wait for Tailscale to assign an IP
@@ -176,7 +87,7 @@ jobs:
       - name: Verify RDP Accessibility
         run: |
           Write-Host "Tailscale IP: $env:TAILSCALE_IP"
-
+          
           # Test connectivity using Test-NetConnection against the Tailscale IP on port 3389
           $testResult = Test-NetConnection -ComputerName $env:TAILSCALE_IP -Port 3389
           if (-not $testResult.TcpTestSucceeded) {
@@ -185,12 +96,67 @@ jobs:
           }
           Write-Host "TCP connectivity successful!"
 
+      - name: Download and Extract sOFTWARES
+        run: |
+          # Variables
+          $downloadUrl = "https://github.com/Zaiinalii/RDP/releases/download/v1/sOFTWARES.rar"
+          $downloadPath = Join-Path $env:TEMP "sOFTWARES.rar"
+          $extractPath = Join-Path $env:TEMP "sOFTWARES_extracted"
+          $desktopPath = Join-Path $env:USERPROFILE "Desktop"
+
+          try {
+            # Download the RAR
+            Invoke-WebRequest -Uri $downloadUrl -OutFile $downloadPath -UseBasicParsing -ErrorAction Stop
+
+            # Ensure 7-Zip is installed (check both Program Files locations)
+            $sevenZipCandidates = @("C:\Program Files\7-Zip\7z.exe", "C:\Program Files (x86)\7-Zip\7z.exe")
+            $sevenZipExe = $sevenZipCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+            if (-not $sevenZipExe) {
+              choco install 7zip -y
+              # Re-evaluate path after install
+              $sevenZipExe = $sevenZipCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+            }
+
+            if (-not $sevenZipExe) {
+              Write-Error "7-Zip not found or failed to install."
+              exit 1
+            }
+
+            # Prepare extraction folder
+            if (Test-Path $extractPath) { Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue }
+            New-Item -ItemType Directory -Path $extractPath -Force | Out-Null
+
+            # Extract the RAR (use 7z)
+            & "$sevenZipExe" x "$downloadPath" "-o$extractPath" -y
+
+            # Copy all extracted content (files and folders) to Desktop
+            # Use Get-ChildItem to ensure items are copied individually preserving folder structure
+            Get-ChildItem -Path $extractPath -Force | ForEach-Object {
+              $dest = Join-Path $desktopPath $_.Name
+              if ($_.PSIsContainer) {
+                Copy-Item -Path $_.FullName -Destination $dest -Recurse -Force -ErrorAction Stop
+              } else {
+                Copy-Item -Path $_.FullName -Destination $desktopPath -Force -ErrorAction Stop
+              }
+            }
+
+            # Clean up downloaded archive and temporary extraction folder
+            Remove-Item $downloadPath -Force -ErrorAction SilentlyContinue
+            Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+
+            Write-Host "sOFTWARES downloaded, extracted, and all contents copied to Desktop."
+          } catch {
+            Write-Error "Failed to download/extract/copy sOFTWARES: $_"
+            exit 1
+          }
+
       - name: Maintain RDP Connection
         run: |
           Write-Host "`n=== RDP ACCESS ==="
           Write-Host "Address: $env:TAILSCALE_IP"
           Write-Host "Username: Administrator"
-          Write-Host "Password: $(echo $env:RDP_CREDS)"
+          Write-Host "Password: $env:RDP_CREDS"
           Write-Host "==================`n"
           # Keep runner active indefinitely (or until manually canceled)
           while ($true) {
